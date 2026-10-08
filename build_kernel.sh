@@ -8,9 +8,10 @@ set -e
 # ==========================================
 if [ -z "$1" ]; then
     echo "[!] Error: No device specified."
-    echo "Usage: $0 <device_name> [ksu] [miui|aosp]"
+    echo "Usage: $0 <device_name> [ksu] [droidspaces] [miui|aosp]"
     echo "Example: $0 lmi"
     echo "         $0 lmi ksu"
+    echo "         $0 lmi droidspaces"
     echo "         $0 lmi ksu miui"
     echo "         $0 lmi aosp"
     exit 1
@@ -27,6 +28,7 @@ if [ ! -f "$DEFCONFIG_PATH" ]; then
 fi
 
 ENABLE_KSU=0
+ENABLE_DROIDSPACES=0
 TARGET_OS="both"
 
 shift
@@ -34,6 +36,7 @@ shift
 for arg in "$@"; do
     case "$arg" in
         ksu) ENABLE_KSU=1 ;;
+        droidspaces) ENABLE_DROIDSPACES=1 ;;
         miui) TARGET_OS="miui" ;;
         aosp) TARGET_OS="aosp" ;;
     esac
@@ -259,9 +262,43 @@ build_target() {
             -e REKERNEL_NETWORK
     fi
 
-    # We always need to re-evaluate dependencies because BBG is injected unconditionally
+    if [ "$ENABLE_DROIDSPACES" -eq 1 ]; then
+        echo "[*] Enabling Droidspaces container configuration..."
+        scripts/config --file "${OUT_DIR}/.config" \
+            -e COMPAT -e COMPAT_32BIT_TIME -e KUSER_HELPERS -e COMPAT_VDSO \
+            -e SYSCTL -e SYSVIPC -e POSIX_MQUEUE \
+            -e NAMESPACES -e PID_NS -e UTS_NS -e IPC_NS -e NET_NS -e USER_NS \
+            -e SECCOMP -e SECCOMP_FILTER \
+            -e CGROUPS -e CGROUP_DEVICE -e CGROUP_PIDS -e MEMCG \
+            -e CGROUP_SCHED -e FAIR_GROUP_SCHED -e CGROUP_FREEZER -e CGROUP_NET_PRIO \
+            -e DEVTMPFS -e OVERLAY_FS -e TMPFS_POSIX_ACL -e TMPFS_XATTR \
+            -e FW_LOADER -e FW_LOADER_USER_HELPER \
+            -e VETH -e BRIDGE -e NETFILTER -e BRIDGE_NETFILTER \
+            -e NETFILTER_ADVANCED -e NF_CONNTRACK -e NF_CT_NETLINK \
+            -e IP_NF_IPTABLES -e IP_NF_FILTER -e IP_NF_NAT \
+            -e NF_NAT -e NF_NAT_IPV4 -e NF_NAT_REDIRECT -e NF_TABLES \
+            -e IP_NF_TARGET_MASQUERADE -e NETFILTER_XT_TARGET_TCPMSS \
+            -e NETFILTER_XT_MATCH_ADDRTYPE -e IP_ADVANCED_ROUTER -e IP_MULTIPLE_TABLES
+    fi
+
+    # We always need to re-evaluate dependencies because config options are injected above.
     echo "[*] Updating config (make olddefconfig)..."
     make "${MAKE_OPTS[@]}" olddefconfig
+
+    if [ "$ENABLE_DROIDSPACES" -eq 1 ]; then
+        for symbol in NAMESPACES PID_NS UTS_NS IPC_NS NET_NS USER_NS SECCOMP \
+            SECCOMP_FILTER CGROUPS CGROUP_DEVICE CGROUP_PIDS MEMCG CGROUP_SCHED \
+            FAIR_GROUP_SCHED CGROUP_FREEZER CGROUP_NET_PRIO DEVTMPFS OVERLAY_FS \
+            TMPFS_POSIX_ACL TMPFS_XATTR FW_LOADER_USER_HELPER VETH BRIDGE \
+            NETFILTER BRIDGE_NETFILTER NF_CONNTRACK NF_CT_NETLINK NF_NAT \
+            NF_NAT_REDIRECT NF_TABLES IP_NF_IPTABLES IP_NF_FILTER IP_NF_NAT \
+            IP_NF_TARGET_MASQUERADE; do
+            if ! grep -q "^CONFIG_${symbol}=y$" "${OUT_DIR}/.config"; then
+                echo "[!] Required Droidspaces config CONFIG_${symbol} is not enabled."
+                exit 1
+            fi
+        done
+    fi
 
     # ----------------------------------------------------
     # Compilation
@@ -298,9 +335,13 @@ build_target() {
         if [ "$ENABLE_KSU" -eq 1 ]; then
             KSU_ZIP_STR="ReSukiSU-SuSFS"
         fi
+        local DROIDSPACES_STR=""
+        if [ "$ENABLE_DROIDSPACES" -eq 1 ]; then
+            DROIDSPACES_STR="_Droidspaces"
+        fi
         local GIT_COMMIT_ID=$(git rev-parse --short=8 HEAD 2>/dev/null || echo "unknown")
         local OS_UPPER=$(echo "$OS_TYPE" | tr '[:lower:]' '[:upper:]')
-        local ZIP_FILENAME="APTKernel_${OS_UPPER}_${DEVICE_NAME}_${KSU_ZIP_STR}_$(date +'%Y%m%d_%H%M%S')_anykernel3_${GIT_COMMIT_ID}.zip"
+        local ZIP_FILENAME="APTKernel_${OS_UPPER}_${DEVICE_NAME}_${KSU_ZIP_STR}${DROIDSPACES_STR}_$(date +'%Y%m%d_%H%M%S')_anykernel3_${GIT_COMMIT_ID}.zip"
         
         echo "[*] Zipping $ZIP_FILENAME ..."
         pushd anykernel > /dev/null

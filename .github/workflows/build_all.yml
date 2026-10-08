@@ -8,6 +8,11 @@ on:
         required: true
         type: boolean
         default: true
+      droidspaces:
+        description: 'Enable Droidspaces container support'
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -78,6 +83,10 @@ jobs:
           ARGS="${{ matrix.device }}"
           if [ "${{ matrix.ksu }}" = "true" ]; then
             ARGS="$ARGS ksu"
+          fi
+
+          if [ "${{ github.event.inputs.droidspaces }}" = "true" ]; then
+            ARGS="$ARGS droidspaces"
           fi
           
           echo "Executing command: ./build_kernel.sh $ARGS"
