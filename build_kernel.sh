@@ -8,9 +8,10 @@ set -e
 # ==========================================
 if [ -z "$1" ]; then
     echo "[!] Error: No device specified."
-    echo "Usage: $0 <device_name> [ksu] [droidspaces] [miui|aosp]"
+    echo "Usage: $0 <device_name> [ksu] [droidspaces] [miui|aosp] [--bakasu-tag <tag>]"
     echo "Example: $0 lmi"
     echo "         $0 lmi ksu"
+    echo "         $0 lmi ksu --bakasu-tag v1.0.0"
     echo "         $0 lmi droidspaces"
     echo "         $0 lmi ksu miui"
     echo "         $0 lmi aosp"
@@ -30,16 +31,27 @@ fi
 ENABLE_KSU=0
 ENABLE_DROIDSPACES=0
 TARGET_OS="both"
+BAKASU_TAG=""
 
 shift
 # Parse remaining arguments loosely
-for arg in "$@"; do
+while [ "$#" -gt 0 ]; do
+    arg="$1"
     case "$arg" in
         ksu) ENABLE_KSU=1 ;;
         droidspaces) ENABLE_DROIDSPACES=1 ;;
         miui) TARGET_OS="miui" ;;
         aosp) TARGET_OS="aosp" ;;
+        --bakasu-tag)
+            if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+                echo "[!] Error: --bakasu-tag requires a non-empty tag or commit."
+                exit 1
+            fi
+            BAKASU_TAG="$2"
+            shift
+            ;;
     esac
+    shift
 done
 
 # ==========================================
@@ -79,7 +91,11 @@ if [ "$ENABLE_KSU" -eq 1 ]; then
     echo " [*] Initializing KernelSU (BakaSU) Setup"
     echo "==========================================="
     echo "[*] Downloading and running BakaSU remote setup script..."
-    curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
+    if [ -n "$BAKASU_TAG" ]; then
+        curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash -s -- "$BAKASU_TAG"
+    else
+        curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
+    fi
     echo "[+] KernelSU setup finished."
 fi
 

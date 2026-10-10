@@ -27,6 +27,11 @@ on:
         required: true
         type: boolean
         default: false
+      bakasu_tag:
+        description: 'Optional BakaSU tag or commit (留空使用默认版本)'
+        required: false
+        type: string
+        default: ''
       droidspaces:
         description: 'Enable Droidspaces container support'
         required: true
@@ -79,25 +84,30 @@ jobs:
         tar -zxvf Clang-16.0.6-20260807.tar.gz
 
     - name: Run Build Script
+      env:
+        BAKASU_TAG: ${{ inputs.bakasu_tag }}
       run: |
         chmod +x build_kernel.sh
         
-        ARGS="${{ github.event.inputs.device }}"
+        ARGS=("${{ inputs.device }}")
         
-        if [ "${{ github.event.inputs.ksu }}" == "true" ]; then
-          ARGS="$ARGS ksu"
+        if [ "${{ inputs.ksu }}" == "true" ]; then
+          ARGS+=(ksu)
+          if [ -n "$BAKASU_TAG" ]; then
+            ARGS+=(--bakasu-tag "$BAKASU_TAG")
+          fi
         fi
 
-        if [ "${{ github.event.inputs.droidspaces }}" == "true" ]; then
-          ARGS="$ARGS droidspaces"
+        if [ "${{ inputs.droidspaces }}" == "true" ]; then
+          ARGS+=(droidspaces)
         fi
         
-        if [ "${{ github.event.inputs.target_os }}" != "both" ]; then
-          ARGS="$ARGS ${{ github.event.inputs.target_os }}"
+        if [ "${{ inputs.target_os }}" != "both" ]; then
+          ARGS+=("${{ inputs.target_os }}")
         fi
         
-        echo "Executing command: ./build_kernel.sh $ARGS"
-        ./build_kernel.sh $ARGS
+        echo "Executing build_kernel.sh for ${{ inputs.device }}"
+        ./build_kernel.sh "${ARGS[@]}"
 
     - name: Upload Flashable ZIP
       uses: actions/upload-artifact@v7

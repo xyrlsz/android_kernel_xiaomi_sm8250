@@ -13,6 +13,11 @@ on:
         required: true
         type: boolean
         default: false
+      bakasu_tag:
+        description: 'Optional BakaSU tag or commit (留空使用默认版本)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -77,20 +82,25 @@ jobs:
           tar -zxvf Clang-16.0.6-20260807.tar.gz
 
       - name: Run Build Script
+        env:
+          BAKASU_TAG: ${{ inputs.bakasu_tag }}
         run: |
           chmod +x build_kernel.sh
           
-          ARGS="${{ matrix.device }}"
+          ARGS=("${{ matrix.device }}")
           if [ "${{ matrix.ksu }}" = "true" ]; then
-            ARGS="$ARGS ksu"
+            ARGS+=(ksu)
+            if [ -n "$BAKASU_TAG" ]; then
+              ARGS+=(--bakasu-tag "$BAKASU_TAG")
+            fi
           fi
 
           if [ "${{ github.event.inputs.droidspaces }}" = "true" ]; then
-            ARGS="$ARGS droidspaces"
+            ARGS+=(droidspaces)
           fi
           
-          echo "Executing command: ./build_kernel.sh $ARGS"
-          ./build_kernel.sh $ARGS
+          echo "Executing build_kernel.sh for ${{ matrix.device }}"
+          ./build_kernel.sh "${ARGS[@]}"
 
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
